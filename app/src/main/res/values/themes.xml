@@ -1,0 +1,7 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.PokeCuratorCompanion" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">#2D6CDF</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:statusBarColor">#1F2329</item>
+    </style>
+</resources>
