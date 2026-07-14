@@ -6,15 +6,31 @@ import org.json.JSONObject
 data class Specimen(
     val cp: Int?,
     val iv: Double?,
+    val atk: Int?,
+    val def: Int?,
+    val sta: Int?,
+    val level: Double?,
+    val gender: String,
     val badges: List<String>,
     val inspect: Boolean,
     val why: String,
 ) {
     fun line(): String {
         val ivStr = iv?.let { "${it.toInt()}%" } ?: "?"
+        // Exact Atk/Def/Sta spread + gender + level: what the in-game appraisal
+        // shows, so same-CP/same-% specimens can be told apart.
+        val spread = if (atk != null && def != null && sta != null) " $atk/$def/$sta" else ""
+        val g = when (gender) {
+            "male" -> " \u2642"
+            "female" -> " \u2640"
+            else -> ""
+        }
+        val lv = level?.let { l ->
+            " L" + (if (l % 1.0 == 0.0) l.toInt().toString() else l.toString())
+        } ?: ""
         val b = if (badges.isNotEmpty()) "  " + badges.joinToString(" ") else ""
         val inspectFlag = if (inspect) "  \uD83D\uDD0E" else ""
-        return "CP ${cp ?: "?"}   IV $ivStr$b$inspectFlag"
+        return "CP ${cp ?: "?"}  $ivStr$spread$g$lv$b$inspectFlag"
     }
 }
 
@@ -93,6 +109,11 @@ data class Plan(
                     Specimen(
                         cp = if (s.isNull("cp")) null else s.optInt("cp"),
                         iv = if (s.isNull("iv")) null else s.optDouble("iv"),
+                        atk = if (s.isNull("atk")) null else s.optInt("atk"),
+                        def = if (s.isNull("def")) null else s.optInt("def"),
+                        sta = if (s.isNull("sta")) null else s.optInt("sta"),
+                        level = if (s.isNull("level")) null else s.optDouble("level"),
+                        gender = s.optString("gender", ""),
                         badges = badges,
                         inspect = s.optBoolean("inspect", false),
                         why = s.optString("why", ""),
