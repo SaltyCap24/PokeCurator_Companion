@@ -11,6 +11,7 @@ data class Specimen(
     val sta: Int?,
     val level: Double?,
     val gender: String,
+    val form: String,
     val badges: List<String>,
     val inspect: Boolean,
     val why: String,
@@ -30,7 +31,10 @@ data class Specimen(
         } ?: ""
         val b = if (badges.isNotEmpty()) "  " + badges.joinToString(" ") else ""
         val inspectFlag = if (inspect) "  \uD83D\uDD0E" else ""
-        return "CP ${cp ?: "?"}  $ivStr$spread$g$lv$b$inspectFlag"
+        // Lead with the form/letter (Unown A, Flabebe White, Alolan, ...) so a
+        // merged multi-form step is readable at a glance.
+        val f = if (form.isNotEmpty()) "[$form] " else ""
+        return "${f}CP ${cp ?: "?"}  $ivStr$spread$g$lv$b$inspectFlag"
     }
 }
 
@@ -122,6 +126,7 @@ data class Plan(
                         sta = if (s.isNull("sta")) null else s.optInt("sta"),
                         level = if (s.isNull("level")) null else s.optDouble("level"),
                         gender = s.optString("gender", ""),
+                        form = s.optString("form", ""),
                         badges = badges,
                         inspect = s.optBoolean("inspect", false),
                         why = s.optString("why", ""),
