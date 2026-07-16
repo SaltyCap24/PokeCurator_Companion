@@ -56,6 +56,7 @@ class OverlayService : Service() {
     private var plan: Plan? = null
     private var index = 0
     private var loadError: String? = null
+    private var picking = false
     private val spriteCache = HashMap<Int, Bitmap>()
 
     // --- lifecycle -------------------------------------------------------
@@ -166,6 +167,10 @@ class OverlayService : Service() {
             stopSelf()
         }
         v.findViewById<View>(R.id.refresh).setOnClickListener { refreshPlan() }
+        v.findViewById<View>(R.id.pick).setOnClickListener {
+            picking = !picking
+            render()
+        }
         val orderToggle = v.findViewById<TextView>(R.id.orderToggle)
         orderToggle.text = orderLabel()
         orderToggle.setOnClickListener {
@@ -191,6 +196,7 @@ class OverlayService : Service() {
         }
         wm.addView(v, panelParams)
         panel = v
+        picking = false
         render()
     }
 
@@ -226,6 +232,9 @@ class OverlayService : Service() {
 
     private fun render() {
         val v = panel ?: return
+        if (picking) { renderPicker(v); return }
+        setChromeVisible(v, true)
+        v.findViewById<TextView>(R.id.pick).text = "\uD83D\uDD0D"
         val title = v.findViewById<TextView>(R.id.title)
         val sub = v.findViewById<TextView>(R.id.subtitle)
         val counts = v.findViewById<TextView>(R.id.counts)
@@ -284,8 +293,10 @@ class OverlayService : Service() {
             transferWarn.visibility = View.GONE
         }
 
-        addZone(zones, "\u2b50 Favorite these FIRST", step.promote, 0xFF1E7D34.toInt())
-        addZone(zones, "\uD83D\uDD0E Review (favorited but outclassed)", step.review, 0xFFC79100.toInt())
+        addZone(zones, "\u2b50 Favorite these FIRST", step.promote, 0xFF1E7D34.toInt(),
+            step.searchPromote, step.promoteAmbiguous)
+        addZone(zones, "\uD83D\uDD0E Review (favorited but outclassed)", step.review, 0xFFC79100.toInt(),
+            step.searchReview, step.reviewAmbiguous)
         addZone(zones, "\uD83E\uDD1D Trade-worthy \u2013 don't transfer", step.trade, 0xFF3F7DF0.toInt())
         addZone(zones, "\uD83D\uDDD1\uFE0F Transfer", step.transfer, 0xFFB03A2E.toInt())
 
@@ -300,7 +311,68 @@ class OverlayService : Service() {
         }
     }
 
-    private fun addZone(parent: LinearLayout, header: String, items: List<Specimen>, color: Int) {
+    // Show/hide the step-specific chrome so the picker can take over the panel.
+    private fun setChromeVisible(v: View, show: Boolean) {
+        val vis = if (show) View.VISIBLE else View.GONE
+        v.findViewById<View>(R.id.searchLabel).visibility = vis
+        v.findViewById<View>(R.id.searchRow).visibility = vis
+        v.findViewById<View>(R.id.transferLabel).visibility = vis
+        v.findViewById<View>(R.id.transferRow).visibility = vis
+        v.findViewById<View>(R.id.navRow).visibility = vis
+        v.findViewById<View>(R.id.counts).visibility = vis
+        v.findViewById<View>(R.id.speciesIcon).visibility = vis
+        if (!show) v.findViewById<View>(R.id.transferWarn).visibility = View.GONE
+    }
+
+    // A tappable, alphabetical list of every species in the plan so the trainer
+    // can jump straight to one's guidance instead of the impact/recent order.
+    private fun renderPicker(v: View) {
+        setChromeVisible(v, false)
+        v.findViewById<TextView>(R.id.pick).text = "\u2715"
+        val title = v.findViewById<TextView>(R.id.title)
+        val sub = v.findViewById<TextView>(R.id.subtitle)
+        val zones = v.findViewById<LinearLayout>(R.id.zones)
+        val scroll = v.findViewById<ScrollView>(R.id.zonesScroll)
+        v.findViewById<ImageView>(R.id.speciesIcon).setImageDrawable(null)
+        zones.removeAllViews()
+        val steps = visibleSteps()
+        title.text = "Jump to a species"
+        if (steps.isEmpty()) {
+            sub.text = "No species to clean up right now."
+            return
+        }
+        sub.text = "${steps.size} species \u00b7 tap one to open its plan"
+        val done = Prefs.done(this)
+        // Alphabetical so a specific species is easy to find in a long plan.
+        val ordered = steps.withIndex().sortedBy { it.value.species.lowercase() }
+        for ((i, st) in ordered) {
+            val isDone = done.contains(st.species)
+            val row = TextView(this).apply {
+                val mark = if (isDone) "\u2713 " else ""
+                text = "$mark${st.species}   \u00b7 ${st.transferCount} to transfer"
+                setTextColor(if (isDone) 0xFF6B7280.toInt() else 0xFFE7EBF0.toInt())
+                textSize = 14f
+                setPadding(dp(10), dp(7), dp(10), dp(7))
+                setOnClickListener {
+                    index = i
+                    picking = false
+                    render()
+                }
+            }
+            zones.addView(row)
+        }
+        // Give the list more room than the per-species zones since it can be long.
+        val cap = (resources.displayMetrics.heightPixels * 0.5f).toInt()
+        scroll.post {
+            val content = scroll.getChildAt(0)?.height ?: 0
+            scroll.layoutParams = scroll.layoutParams.apply {
+                height = if (content > cap) cap else ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+        }
+    }
+
+    private fun addZone(parent: LinearLayout, header: String, items: List<Specimen>, color: Int,
+                        search: String? = null, ambiguous: Boolean = false) {
         if (items.isEmpty()) return
         val h = TextView(this).apply {
             text = "$header  (${items.size})"
@@ -309,6 +381,48 @@ class OverlayService : Service() {
             setPadding(0, dp(8), 0, dp(2))
         }
         parent.addView(h)
+        // Optional CP(+HP) search that isolates this zone's specimens, with a
+        // one-tap Copy and a warning when it can't guarantee a clean selection.
+        if (!search.isNullOrEmpty()) {
+            val searchRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(2), 0, dp(2))
+            }
+            val q = TextView(this).apply {
+                text = search
+                setTextColor(0xFFE7EBF0.toInt())
+                textSize = 12f
+                setBackgroundColor(0xFF1F2329.toInt())
+                setPadding(dp(8), dp(6), dp(8), dp(6))
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val btn = Button(this).apply {
+                text = "Copy"
+                textSize = 11f
+                minWidth = 0; minimumWidth = 0
+                setPadding(dp(10), 0, dp(10), 0)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { marginStart = dp(6) }
+                setOnClickListener { copy(search) }
+            }
+            searchRow.addView(q)
+            searchRow.addView(btn)
+            parent.addView(searchRow)
+            if (ambiguous) {
+                val warn = TextView(this).apply {
+                    text = "\u26A0 Matches by CP + HP as separate lists (exact IVs aren't " +
+                        "searchable), so it can also pull in another copy that shares a " +
+                        "listed CP and HP \u2013 check each result before you favorite/transfer."
+                    setTextColor(0xFFF2C14E.toInt())
+                    textSize = 11f
+                    setBackgroundColor(0xFF3A2A12.toInt())
+                    setPadding(dp(8), dp(6), dp(8), dp(6))
+                }
+                parent.addView(warn)
+            }
+        }
         for (s in items) {
             val row = TextView(this).apply {
                 text = s.line() + (if (s.why.isNotEmpty()) "   \u00b7 ${s.why}" else "")
