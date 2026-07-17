@@ -70,6 +70,35 @@ class MainActivity : AppCompatActivity() {
             Prefs.clearDone(this)
             toast("Cleanup progress reset.")
         }
+
+        handleLaunchIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleLaunchIntent(intent)
+    }
+
+    /**
+     * When opened via the pokecurator://overlay deep link (the "Start Transfer
+     * Overlay" button on pokecurator.com), auto-start the overlay if it's ready;
+     * otherwise fall through to the setup screen with a hint.
+     */
+    private fun handleLaunchIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme != "pokecurator" || data.host != "overlay") return
+        when {
+            Prefs.planUrl(this) == null ->
+                toast("Paste and save your sync URL first.")
+            !canDrawOverlays() ->
+                toast("Grant \"Display over other apps\" first.")
+            else -> {
+                OverlayService.start(this)
+                toast("Overlay started \u2013 open Pokemon GO.")
+                moveTaskToBack(true)
+            }
+        }
     }
 
     override fun onResume() {
