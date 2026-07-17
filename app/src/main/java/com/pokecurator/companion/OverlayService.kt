@@ -234,6 +234,10 @@ class OverlayService : Service() {
         val v = panel ?: return
         if (picking) { renderPicker(v); return }
         setChromeVisible(v, true)
+        // The old species-search step is retired; step 1 is now "favorite these"
+        // (shown in the promote zone below), so hide the species-search row.
+        v.findViewById<View>(R.id.searchLabel).visibility = View.GONE
+        v.findViewById<View>(R.id.searchRow).visibility = View.GONE
         v.findViewById<TextView>(R.id.pick).text = "\uD83D\uDD0D"
         val title = v.findViewById<TextView>(R.id.title)
         val sub = v.findViewById<TextView>(R.id.subtitle)
@@ -293,7 +297,7 @@ class OverlayService : Service() {
             transferWarn.visibility = View.GONE
         }
 
-        addZone(zones, "\u2b50 Favorite these FIRST", step.promote, 0xFF1E7D34.toInt(),
+        addZone(zones, "\u2460 Search & favorite these FIRST", step.promote, 0xFF1E7D34.toInt(),
             step.searchPromote, step.promoteAmbiguous)
         addZone(zones, "\uD83D\uDD0E Review (favorited but outclassed)", step.review, 0xFFC79100.toInt(),
             step.searchReview, step.reviewAmbiguous)
