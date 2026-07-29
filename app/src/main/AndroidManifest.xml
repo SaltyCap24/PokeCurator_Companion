@@ -36,7 +36,7 @@
         <activity
             android:name=".VisionCaptureActivity"
             android:exported="false"
-            android:theme="@style/Theme.AppCompat.Translucent.NoTitleBar" />
+            android:theme="@style/Theme.PokeCuratorCompanion.Translucent" />
 
         <!-- Existing transfer-helper overlay. Kept unchanged and separate. -->
         <service
