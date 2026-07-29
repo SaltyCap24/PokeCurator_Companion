@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Draw the cleanup overlay above Pokemon GO / PGSharp. -->
+    <!-- Draw both companion tools above Pokemon GO / PGSharp. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- Network: fetch the cleanup plan from the PokeCurator server. -->
+    <!-- Network: fetch cleanup recommendations from the PokeCurator server. -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Keep the overlay alive via a foreground service. -->
+    <!-- Keep the overlays and screen capture alive via foreground services. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -24,8 +25,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Deep link so pokecurator.com can launch/auto-start the overlay:
-                 pokecurator://overlay -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -34,6 +33,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".VisionCaptureActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PokeCuratorCompanion.Translucent" />
+
+        <!-- Existing transfer-helper overlay. Kept unchanged and separate. -->
         <service
             android:name=".OverlayService"
             android:exported="false"
@@ -42,5 +47,11 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Floating cleanup overlay shown above Pokemon GO during transfers." />
         </service>
+
+        <!-- New OCR-powered full-screen collection grid assistant. -->
+        <service
+            android:name=".VisionOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
     </application>
 </manifest>

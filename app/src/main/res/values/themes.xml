@@ -4,4 +4,10 @@
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="android:statusBarColor">#1F2329</item>
     </style>
+    <style name="Theme.PokeCuratorCompanion.Translucent" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorAccent">#2D6CDF</item>
+    </style>
 </resources>
