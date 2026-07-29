@@ -10,8 +10,9 @@ import androidx.appcompat.app.AppCompatActivity
 import com.pokecurator.companion.databinding.ActivityMainBinding
 
 /**
- * Setup screen: paste the PokeCurator sync URL, grant "Display over other apps",
- * then launch the floating cleanup overlay.
+ * Setup screen for both companion tools:
+ * 1) the existing transfer-helper bubble/panel; and
+ * 2) the separate OCR-powered collection Grid Assist.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -27,7 +28,7 @@ class MainActivity : AppCompatActivity() {
         b.saveUrl.setOnClickListener {
             val url = b.syncUrl.text.toString().trim()
             if (Uri.parse(url).getQueryParameter("token").isNullOrBlank()) {
-                toast("That URL is missing its ?token=\u2026 part.")
+                toast("That URL is missing its ?token=… part.")
             } else {
                 Prefs.setSyncUrl(this, url)
                 toast("Saved.")
@@ -47,15 +48,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Existing helper: intentionally unchanged.
         b.startOverlay.setOnClickListener {
             when {
-                Prefs.planUrl(this) == null ->
-                    toast("Paste and save your sync URL first.")
-                !canDrawOverlays() ->
-                    toast("Grant \"Display over other apps\" first.")
+                Prefs.planUrl(this) == null -> toast("Paste and save your sync URL first.")
+                !canDrawOverlays() -> toast("Grant Display over other apps first.")
                 else -> {
                     OverlayService.start(this)
-                    toast("Overlay started \u2013 open Pokemon GO.")
+                    toast("Transfer helper started — open Pokémon GO.")
                     moveTaskToBack(true)
                 }
             }
@@ -63,7 +63,21 @@ class MainActivity : AppCompatActivity() {
 
         b.stopOverlay.setOnClickListener {
             OverlayService.stop(this)
-            toast("Overlay stopped.")
+            toast("Transfer helper stopped.")
+        }
+
+        // New tool: starts Android's screen-capture consent flow.
+        b.startVisionOverlay.setOnClickListener {
+            when {
+                Prefs.planUrl(this) == null -> toast("Paste and save your sync URL first.")
+                !canDrawOverlays() -> toast("Grant Display over other apps first.")
+                else -> startActivity(Intent(this, VisionCaptureActivity::class.java))
+            }
+        }
+
+        b.stopVisionOverlay.setOnClickListener {
+            VisionOverlayService.stop(this)
+            toast("Grid Assist stopped.")
         }
 
         b.resetProgress.setOnClickListener {
@@ -80,22 +94,16 @@ class MainActivity : AppCompatActivity() {
         handleLaunchIntent(intent)
     }
 
-    /**
-     * When opened via the pokecurator://overlay deep link (the "Start Transfer
-     * Overlay" button on pokecurator.com), auto-start the overlay if it's ready;
-     * otherwise fall through to the setup screen with a hint.
-     */
+    /** Existing pokecurator://overlay deep link continues to start only the old helper. */
     private fun handleLaunchIntent(intent: Intent?) {
         val data = intent?.data ?: return
         if (data.scheme != "pokecurator" || data.host != "overlay") return
         when {
-            Prefs.planUrl(this) == null ->
-                toast("Paste and save your sync URL first.")
-            !canDrawOverlays() ->
-                toast("Grant \"Display over other apps\" first.")
+            Prefs.planUrl(this) == null -> toast("Paste and save your sync URL first.")
+            !canDrawOverlays() -> toast("Grant Display over other apps first.")
             else -> {
                 OverlayService.start(this)
-                toast("Overlay started \u2013 open Pokemon GO.")
+                toast("Transfer helper started — open Pokémon GO.")
                 moveTaskToBack(true)
             }
         }
@@ -104,8 +112,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         b.overlayStatus.text =
-            if (canDrawOverlays()) "\u2705 Overlay permission granted"
-            else "\u274C Overlay permission needed"
+            if (canDrawOverlays()) "✅ Overlay permission granted"
+            else "❌ Overlay permission needed"
     }
 
     private fun canDrawOverlays(): Boolean =
