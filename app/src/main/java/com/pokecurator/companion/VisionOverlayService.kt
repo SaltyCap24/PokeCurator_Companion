@@ -200,7 +200,10 @@ class VisionOverlayService : Service() {
 
         recognizer.process(InputImage.fromBitmap(cropped, 0))
             .addOnSuccessListener { result -> handleOcrResult(result, width, height) }
-            .addOnFailureListener { setStatus("Grid Assist OCR error - no recommendations shown") }
+            .addOnFailureListener {
+                debugOverlay?.post { debugOverlay?.clearTiles() }
+                setStatus("Grid Assist OCR error - no recommendations shown")
+            }
             .addOnCompleteListener {
                 cropped.recycle()
                 recognizing.set(false)
@@ -227,6 +230,12 @@ class VisionOverlayService : Service() {
             }
             .sortedWith(compareBy<OcrLine> { it.centerY }.thenBy { it.centerX })
         val cpLines = allLines.filter { it.text.startsWith("CP", ignoreCase = true) }
+        if (!isPokemonCollectionGridVisible(allLines, cpLines)) {
+            debugOverlay?.post { debugOverlay?.clearTiles() }
+            setStatus(recommendationIndex.statusMessage)
+            statusView?.post { statusView?.visibility = View.VISIBLE }
+            return
+        }
 
         val rows = clusterRows(cpLines, height)
         val positionedTiles = cpLines.map { line ->
@@ -259,6 +268,12 @@ class VisionOverlayService : Service() {
         }
         setStatus(state)
         statusView?.post { statusView?.visibility = if (cpLines.isNotEmpty()) View.GONE else View.VISIBLE }
+    }
+
+    private fun isPokemonCollectionGridVisible(allLines: List<OcrLine>, cpLines: List<OcrLine>): Boolean {
+        if (cpLines.size < MIN_COLLECTION_CP_LINES) return false
+        val text = allLines.joinToString(" ") { it.text }.lowercase(Locale.US)
+        return COLLECTION_GRID_TERMS.any { it in text }
     }
 
     private fun maybeRefreshPlan() {
@@ -596,9 +611,25 @@ class VisionOverlayService : Service() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }
 
+        private var clearGeneration = 0
+
         fun setTiles(nextTiles: List<TileDebug>) {
+            clearGeneration += 1
             tiles.clear()
             tiles.addAll(nextTiles)
+            invalidate()
+            if (nextTiles.isNotEmpty()) {
+                val generation = clearGeneration
+                postDelayed({
+                    if (generation == clearGeneration) clearTiles()
+                }, MARKER_STALE_TIMEOUT_MS)
+            }
+        }
+
+        fun clearTiles() {
+            clearGeneration += 1
+            if (tiles.isEmpty()) return
+            tiles.clear()
             invalidate()
         }
 
@@ -642,6 +673,9 @@ class VisionOverlayService : Service() {
         private const val GRID_COLUMNS = 3
         private const val OCR_INTERVAL_MS = 1_000L
         private const val PLAN_REFRESH_INTERVAL_MS = 30_000L
+        private const val MARKER_STALE_TIMEOUT_MS = 2_500L
+        private const val MIN_COLLECTION_CP_LINES = 3
+        private val COLLECTION_GRID_TERMS = listOf("search", "pokemon", "pokémon", "eggs", "tags")
         private const val MAX_TILE_DEBUG_CHARS = 28
 
         fun start(context: Context, resultCode: Int, resultData: Intent) {
