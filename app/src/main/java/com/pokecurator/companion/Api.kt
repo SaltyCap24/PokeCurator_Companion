@@ -16,11 +16,16 @@ object Api {
     suspend fun fetchPlan(planUrl: String): Result = withContext(Dispatchers.IO) {
         var conn: HttpURLConnection? = null
         try {
-            conn = (URL(planUrl).openConnection() as HttpURLConnection).apply {
+            val separator = if (planUrl.contains("?")) "&" else "?"
+            val cacheBustedUrl = "$planUrl${separator}_=${System.currentTimeMillis()}"
+            conn = (URL(cacheBustedUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 15000
                 readTimeout = 30000
+                useCaches = false
                 setRequestProperty("User-Agent", "PokeCurator-Companion")
+                setRequestProperty("Cache-Control", "no-cache")
+                setRequestProperty("Pragma", "no-cache")
             }
             val code = conn.responseCode
             if (code == 401) return@withContext Result.Error(

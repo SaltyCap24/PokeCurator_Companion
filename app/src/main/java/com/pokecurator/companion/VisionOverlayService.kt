@@ -60,6 +60,8 @@ class VisionOverlayService : Service() {
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private var recommendationIndex = RecommendationIndex.empty("Grid Assist: loading cleanup plan...")
+    private var lastPlanRefreshAt = 0L
+    private var planRefreshInFlight = false
     private var lastFrameStartedAt = 0L
     private var lastStatusMessage: String? = null
     private val projectionCallback = object : MediaProjection.Callback() {
@@ -106,22 +108,34 @@ class VisionOverlayService : Service() {
         super.onDestroy()
     }
 
-    private fun refreshPlan() {
+    private fun refreshPlan(showStatus: Boolean = true) {
+        if (planRefreshInFlight) return
         val url = Prefs.planUrl(this) ?: run {
             recommendationIndex = RecommendationIndex.empty("Grid Assist: sync URL missing")
             setStatus("Grid Assist: sync URL missing")
             return
         }
+        lastPlanRefreshAt = SystemClock.elapsedRealtime()
+        planRefreshInFlight = true
         scope.launch {
-            when (val result = Api.fetchPlan(url)) {
-                is Api.Result.Ok -> {
-                    recommendationIndex = RecommendationIndex.fromPlan(result.plan)
-                    setStatus("Grid Assist: plan loaded (${recommendationIndex.matchableCount} matchable Pokemon)")
+            try {
+                when (val result = Api.fetchPlan(url)) {
+                    is Api.Result.Ok -> {
+                        recommendationIndex = RecommendationIndex.fromPlan(result.plan)
+                        lastPlanRefreshAt = SystemClock.elapsedRealtime()
+                        if (showStatus) {
+                            setStatus("Grid Assist: plan loaded (${recommendationIndex.matchableCount} matchable Pokemon)")
+                        }
+                    }
+                    is Api.Result.Error -> {
+                        if (showStatus) {
+                            recommendationIndex = RecommendationIndex.empty("Grid Assist: plan load failed")
+                            setStatus("Grid Assist: plan load failed - ${result.message}")
+                        }
+                    }
                 }
-                is Api.Result.Error -> {
-                    recommendationIndex = RecommendationIndex.empty("Grid Assist: plan load failed")
-                    setStatus("Grid Assist: plan load failed - ${result.message}")
-                }
+            } finally {
+                planRefreshInFlight = false
             }
         }
     }
@@ -194,6 +208,7 @@ class VisionOverlayService : Service() {
     }
 
     private fun handleOcrResult(result: Text, width: Int, height: Int) {
+        maybeRefreshPlan()
         val allLines = result.textBlocks
             .flatMap { it.lines }
             .mapNotNull { line ->
@@ -246,6 +261,12 @@ class VisionOverlayService : Service() {
         statusView?.post { statusView?.visibility = if (cpLines.isNotEmpty()) View.GONE else View.VISIBLE }
     }
 
+    private fun maybeRefreshPlan() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastPlanRefreshAt >= PLAN_REFRESH_INTERVAL_MS) {
+            refreshPlan(showStatus = false)
+        }
+    }
     private fun buildTileDebug(index: Int, cpLine: OcrLine, tileElements: List<OcrLine>, cell: RectF): TileDebug {
         val reading = extractTileReading(cpLine, tileElements)
         val match = recommendationIndex.match(reading)
@@ -502,16 +523,16 @@ class VisionOverlayService : Service() {
             val species = reading.species
             if (species != null) {
                 val matches = candidates[IdentityKey(species.normalizedSpeciesKey(), cp, ivPercent)].orEmpty()
-                if (matches.isEmpty()) return RecommendationMatch(RecommendationAction.Keep.badge)
+                if (matches.isEmpty()) return RecommendationMatch("?")
                 return matches.toRecommendationMatch()
             }
 
             val fallbackMatches = cpIvCandidates[CpIvKey(cp, ivPercent)].orEmpty()
-            return fallbackMatches.toRecommendationMatch(requireMatch = true)
+            return fallbackMatches.toRecommendationMatch()
         }
 
-        private fun List<RecommendationCandidate>.toRecommendationMatch(requireMatch: Boolean = false): RecommendationMatch {
-            if (isEmpty()) return RecommendationMatch(if (requireMatch) "?" else RecommendationAction.Keep.badge)
+        private fun List<RecommendationCandidate>.toRecommendationMatch(): RecommendationMatch {
+            if (isEmpty()) return RecommendationMatch("?")
             val actions = map { it.action }.distinct()
             return if (actions.size == 1) RecommendationMatch(actions.first().badge) else RecommendationMatch("AMB")
         }
@@ -619,6 +640,7 @@ class VisionOverlayService : Service() {
         private const val NOTIFICATION_ID = 202
         private const val GRID_COLUMNS = 3
         private const val OCR_INTERVAL_MS = 1_000L
+        private const val PLAN_REFRESH_INTERVAL_MS = 30_000L
         private const val MAX_TILE_DEBUG_CHARS = 28
 
         fun start(context: Context, resultCode: Int, resultData: Intent) {
