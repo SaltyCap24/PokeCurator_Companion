@@ -55,7 +55,7 @@ object Prefs {
      * Accepts either the ".../api/ingest/pgsharp?token=..." sync URL or an
      * already-correct export URL; preserves scheme, host and the token.
      */
-    fun planUrl(ctx: Context): String? {
+    fun planUrl(ctx: Context, includeAll: Boolean = false): String? {
         val raw = syncUrl(ctx)
         if (raw.isBlank()) return null
         val uri = Uri.parse(raw)
@@ -63,6 +63,7 @@ object Prefs {
         val host = uri.authority ?: return null
         val token = uri.getQueryParameter("token")?.trim().orEmpty()
         if (token.isEmpty()) return null
-        return "$scheme://$host/api/export/transfer-session?token=$token&mode=${mode(ctx)}&order=${order(ctx)}"
+        val base = "$scheme://$host/api/export/transfer-session?token=$token&mode=${mode(ctx)}&order=${order(ctx)}"
+        return if (includeAll) "$base&include_all=1" else base
     }
 }

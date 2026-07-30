@@ -110,7 +110,7 @@ class VisionOverlayService : Service() {
 
     private fun refreshPlan(showStatus: Boolean = true) {
         if (planRefreshInFlight) return
-        val url = Prefs.planUrl(this) ?: run {
+        val url = Prefs.planUrl(this, includeAll = true) ?: run {
             recommendationIndex = RecommendationIndex.empty("Grid Assist: sync URL missing")
             setStatus("Grid Assist: sync URL missing")
             return
@@ -544,6 +544,7 @@ class VisionOverlayService : Service() {
                 val out = LinkedHashMap<IdentityKey, MutableList<RecommendationCandidate>>()
                 val cpIvOut = LinkedHashMap<CpIvKey, MutableList<RecommendationCandidate>>()
                 plan.steps.forEach { step ->
+                    addSpecimens(out, cpIvOut, step.species, step.confirmed, RecommendationAction.Keep)
                     addSpecimens(out, cpIvOut, step.species, step.promote, RecommendationAction.Keep)
                     addSpecimens(out, cpIvOut, step.species, step.review, RecommendationAction.Keep)
                     addSpecimens(out, cpIvOut, step.species, step.trade, RecommendationAction.Trade)
